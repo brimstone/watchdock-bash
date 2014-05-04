@@ -1,0 +1,169 @@
+#!/bin/bash
+
+set -ueo pipefail
+#set -x
+
+ETCDHOST=localhost
+ETCDPORT=4001
+TTL=120
+ETCDCTLBIN="$(which etcdctl || :)"
+
+while [ $# -gt 0 ]; do
+	case "$1" in
+		--etcdhost)
+			shift
+			ETCDHOST="$1"
+		;;
+		--etcdport)
+			shift
+			ETCDPORT="$1"
+		;;
+		--ttl)
+			shift
+			TTL="$1"
+		;;
+		--etcdctl)
+			shift
+			ETCDCTLBIN="$1"
+		;;
+		*)
+			echo "Unknown option $1"
+			exit 1
+		;;
+	esac
+	shift
+done
+
+if [ -z "$ETCDCTLBIN" ]; then
+	echo "Unable to find etcdctl binary, this must be in \$PATH or specified with --etcdctl!" >&2
+	exit 1
+fi
+
+ETCDCTL="$ETCDCTLBIN -C http://$ETCDHOST:$ETCDPORT"
+
+echo "Checking containers"
+containers=""
+if ! containers=$($ETCDCTL ls /containers); then
+	echo "Error getting containers: $containers"
+	echo "$ $ETCDCTL ls /containers"
+	exit 1
+fi
+
+for container in $($ETCDCTL ls /containers); do
+	NAME="${container##*/}"
+
+	# Get locations this container can run, required
+	WHERE=""
+	WHERE=$($ETCDCTL get $container/where) || continue
+
+	# Determine if we should be running this image
+	SHOULDRUN="false"
+	if [ "$WHERE" = "$HOSTNAME" ]; then
+		SHOULDRUN="true"
+	elif [ "$WHERE" = "*" ]; then
+		SHOULDRUN="true"
+	else
+		# TODO Check to see if we've hit our max instances 
+		for host in $WHERE; do
+			if [ "$host" = "$HOSTNAME" ]; then
+				SHOULDRUN="true"
+			fi
+		done
+	fi
+
+	# Determine status of container
+	STATUS=""
+	if RUNNING=$(docker inspect -f "{{ .State.Running }}" $NAME 2>/dev/null); then
+		if [ $RUNNING = "true" ]; then
+			STATUS="running"
+			$ETCDCTL set --ttl $TTL $container/hosts/$HOSTNAME $STATUS >/dev/null
+		else
+			STATUS="stopped"
+		fi
+	fi
+
+	# if we shouldn't be running our image
+	if [ "$SHOULDRUN" = "false" ]; then
+		# stop it if it's running
+		if [ "$STATUS" = "running" ]; then
+			echo "$NAME shouldn't be running, stopping"
+			docker stop $NAME >/dev/null
+			$ETCDCTL set --ttl $TTL $container/hosts/$HOSTNAME stopped >/dev/null
+			continue
+		else
+			echo "$NAME isn't meant for us, ignoring"
+			continue
+		fi
+	# If we should be running
+	else
+		# And we are
+		if [ "$STATUS" = "running" ]; then
+			echo "$NAME is running. All is well"
+			continue
+		# if it's just stopped, start it
+		elif [ "$STATUS" = "stopped" ]; then
+			docker start "$NAME" >/dev/null
+			$ETCDCTL set --ttl $TTL $container/hosts/$HOSTNAME stopped >/dev/null
+		# else, gather up what else we need and start it at the bottom
+		fi
+	fi
+
+	# Get our image, required
+	IMAGE=""
+	IMAGE=$($ETCDCTL get $container/image) || continue
+
+
+	# Get our ports, optional
+	PORTS=""
+	if PORTS=$($ETCDCTL get $container/ports); then
+		PORTS=${PORTS// / -p }
+		PORTS="-p $PORTS"
+	else
+		PORTS=""
+	fi
+
+	# Get our hostname, optional
+	HNAME=""
+	if HNAME=$($ETCDCTL get $container/hostname); then
+		HNAME="-h $HNAME"
+	else
+		HNAME=""
+	fi
+
+	# Get our volumes, optional
+	VOLUMES=""
+	if VOLUMES=$($ETCDCTL get $container/volumes); then
+		VOLUMES=${VOLUMES// / -v }
+		VOLUMES="-v $VOLUMES"
+	else
+		VOLUMES=""
+	fi
+
+	# Get our links, optional
+	LINKS=""
+	if LINKS=$($ETCDCTL get $container/links); then
+		LINKS=${LINKS// / -link }
+		LINKS="--link $LINKS"
+	else
+		LINKS=""
+	fi
+
+	# Get our command, optional
+	COMMAND=""
+	if ! COMMAND=$($ETCDCTL get $container/command); then
+		COMMAND=""
+	fi
+
+	# Get our pty, optional
+	NEEDPTY=""
+	if NEEDPTY=$($ETCDCTL get $container/pty); then
+		NEEDPTY="-t"
+	else
+		NEEDPTY=""
+	fi
+
+	
+	echo docker run -d --name $NAME $NEEDPTY $LINKS $VOLUMES $HNAME $PORTS $IMAGE $COMMAND
+	docker run -d --name $NAME $NEEDPTY $LINKS $VOLUMES $HNAME $PORTS $IMAGE $COMMAND
+	echo
+done
