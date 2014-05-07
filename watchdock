@@ -18,6 +18,27 @@ Usage: $0 [--etcdhost hostname] [--etcdport number] [--ttl seconds]
 DOG
 }
 
+# This determines if we can even run a container on our host
+canrun(){
+	# Get locations this container can run, required
+	WHERE=""
+	WHERE=$($ETCDCTL get $1/where) || continue
+
+	# Determine if we should be running this image
+	if [ "$WHERE" = "$HOSTNAME" ]; then
+		return 0
+	elif [ "$WHERE" = "*" ]; then
+		return 0
+	else
+		for host in $WHERE; do
+			if [ "$host" = "$HOSTNAME" ]; then
+				return 0
+			fi
+		done
+	fi
+	return 1
+}
+
 while [ $# -gt 0 ]; do
 	case "$1" in
 		--etcdhost)
@@ -88,17 +109,38 @@ for container in $($ETCDCTL ls /containers); do
 
 	# Determine if we should be running this image
 	SHOULDRUN="false"
-	if [ "$WHERE" = "$HOSTNAME" ]; then
-		SHOULDRUN="true"
-	elif [ "$WHERE" = "*" ]; then
-		SHOULDRUN="true"
+	canrun "$container" && SHOULDRUN="true"
+
+	# Check to see if we've hit our max instances 
+	MAXINST=""
+	if ! MAXINST=$($ETCDCTL get $container/maxinstances); then
+		MAXINST=""
 	else
-		# TODO Check to see if we've hit our max instances 
-		for host in $WHERE; do
-			if [ "$host" = "$HOSTNAME" ]; then
-				SHOULDRUN="true"
+		# find our hosts running our container already
+		nodes=""
+		if ! nodes="$($ETCDCTL ls $container/hosts)"; then
+			echo "Why can't I find $container/hosts?" >&2
+			exit 1
+		fi
+		# count up the running instances
+		instances=0
+		for node in $($ETCDCTL ls $container/hosts); do
+			STATE=""
+			if ! STATE=$($ETCDCTL get $node); then
+				echo "Couldn't read state of host $node" >&2
+				continue
+			fi
+			if [ "$STATE" = "Running" ]; then
+				instances=$[ $instances + 1 ]
 			fi
 		done
+		# If we have more than our max, we shouldn't run it
+		# FIXME There might be a bug here if we're already running a container \
+		#	and there's MAXINST+1 instances running. Not sure how to fix that  \
+		#	right now
+		if [ "$instances" -gt "$MAXINST" ]; then
+			SHOULDRUN="false"
+		fi
 	fi
 
 	# Determine status of container
