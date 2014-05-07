@@ -192,6 +192,7 @@ for container in $($ETCDCTL ls /containers); do
 	fi
 
 	
+	$ETCDCTL set $container/hosts/$HOSTNAME "starting" >/dev/null
 	echo docker run -d --name $NAME $NEEDPTY $LINKS $VOLUMES $HNAME $PORTS $IMAGE $COMMAND
 	docker run -d --name $NAME $NEEDPTY $LINKS $VOLUMES $HNAME $PORTS $IMAGE $COMMAND
 	echo
