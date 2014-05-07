@@ -50,6 +50,19 @@ while [ $# -gt 0 ]; do
 	shift
 done
 
+# check to see if 'docker' is already running somewhere else and bail unless forced
+DOCKERDPID=$(pgrep -f "docker -d" || pgrep -f "docker.io -d" || :)
+if [ -z "$DOCKERDPID" ]; then
+	echo "docker -d not detected. Exiting" >&2
+	exit 1
+fi
+
+OTHERDOCKERPID=$(pgrep docker | grep -v $DOCKERDPID)
+if [ -n "$OTHERDOCKERPID" ]; then
+	echo "Exiting because docker is already running: $( echo "$OTHERDOCKERPID" | tr '\n' ' ')" >&2
+	exit 1
+fi
+
 if [ -z "$ETCDCTLBIN" ]; then
 	echo "Unable to find etcdctl binary, this must be in \$PATH or specified with --etcdctl!" >&2
 	exit 1
