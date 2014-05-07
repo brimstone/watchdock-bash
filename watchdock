@@ -75,6 +75,7 @@ containers=""
 if ! containers=$($ETCDCTL ls /containers); then
 	echo "Error getting containers: $containers. Tried:" >&2
 	echo "$ $ETCDCTL ls /containers" >&2
+	echo "Maybe you need --etcdhost or --etcdport?" >&2
 	exit 1
 fi
 
