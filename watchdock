@@ -178,6 +178,7 @@ for container in $containers; do
 		# stop it if it's running
 		if [ "$STATUS" = "running" ]; then
 			echo "$NAME shouldn't be running, stopping"
+			# TODO be quiet only if requested
 			docker stop $NAME >/dev/null
 			$ETCDCTL set --ttl $TTL $container/hosts/$HOSTNAME stopped >/dev/null
 			continue
@@ -193,6 +194,7 @@ for container in $containers; do
 			continue
 		# if it's just stopped, start it
 		elif [ "$STATUS" = "stopped" ]; then
+			# TODO be quiet only if requested
 			docker start "$NAME" >/dev/null
 			$ETCDCTL set --ttl $TTL $container/hosts/$HOSTNAME stopped >/dev/null
 		# else, gather up what else we need and start it at the bottom
@@ -255,7 +257,7 @@ for container in $containers; do
 
 	
 	$ETCDCTL set $container/hosts/$HOSTNAME "starting" >/dev/null
-	echo docker run -d --name $NAME $NEEDPTY $LINKS $VOLUMES $HNAME $PORTS $IMAGE $COMMAND
+	# TODO be quiet only if requested
 	docker run -d --name $NAME $NEEDPTY $LINKS $VOLUMES $HNAME $PORTS $IMAGE $COMMAND
 	echo
 done
