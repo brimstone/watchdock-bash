@@ -8,6 +8,11 @@ TTL=120
 ETCDCTLBIN="$(which etcdctl || :)"
 
 DOPULL=0
+QUIET=0
+SILENT=0
+if [ $TERM = "dumb" ]; then
+	QUIET=1
+fi
 
 usage(){
 	cat <<DOG
@@ -98,7 +103,7 @@ fi
 
 ETCDCTL="$ETCDCTLBIN -C http://$ETCDHOST:$ETCDPORT"
 
-echo "Checking containers"
+[ "$QUIET" = 0 ] && echo "Checking containers"
 containers=""
 if ! containers=$($ETCDCTL ls /containers); then
 	echo "Error getting containers: $containers. Tried:" >&2
@@ -130,6 +135,18 @@ for container in $containers; do
 	SHOULDRUN="false"
 	canrun "$container" && SHOULDRUN="true"
 
+
+	# Determine status of container
+	STATUS=""
+	if RUNNING=$(docker inspect -f "{{ .State.Running }}" $NAME 2>/dev/null); then
+		if [ $RUNNING = "true" ]; then
+			STATUS="running"
+			$ETCDCTL set --ttl $TTL $container/hosts/$HOSTNAME $STATUS >/dev/null
+		else
+			STATUS="stopped"
+		fi
+	fi
+
 	# Check to see if we've hit our max instances 
 	MAXINST=""
 	if ! MAXINST=$($ETCDCTL get $container/maxinstances); then
@@ -149,27 +166,13 @@ for container in $containers; do
 				echo "Couldn't read state of host $node" >&2
 				continue
 			fi
-			if [ "$STATE" = "Running" ]; then
+			if [ "$STATE" = "running" ]; then
 				instances=$[ $instances + 1 ]
 			fi
 		done
 		# If we have more than our max, we shouldn't run it
-		# FIXME There might be a bug here if we're already running a container \
-		#	and there's MAXINST+1 instances running. Not sure how to fix that  \
-		#	right now
 		if [ "$instances" -gt "$MAXINST" ]; then
 			SHOULDRUN="false"
-		fi
-	fi
-
-	# Determine status of container
-	STATUS=""
-	if RUNNING=$(docker inspect -f "{{ .State.Running }}" $NAME 2>/dev/null); then
-		if [ $RUNNING = "true" ]; then
-			STATUS="running"
-			$ETCDCTL set --ttl $TTL $container/hosts/$HOSTNAME $STATUS >/dev/null
-		else
-			STATUS="stopped"
 		fi
 	fi
 
@@ -177,26 +180,28 @@ for container in $containers; do
 	if [ "$SHOULDRUN" = "false" ]; then
 		# stop it if it's running
 		if [ "$STATUS" = "running" ]; then
-			echo "$NAME shouldn't be running, stopping"
-			# TODO be quiet only if requested
+			# be quiet only if requested
+			[ "$SILENT" = 0 ] && echo "Stopping $NAME"
 			docker stop $NAME >/dev/null
 			$ETCDCTL set --ttl $TTL $container/hosts/$HOSTNAME stopped >/dev/null
 			continue
 		else
-			echo "$NAME isn't meant for us, ignoring"
+			[ "$QUIET" = 0 ] && echo "$NAME isn't meant for us, ignoring"
 			continue
 		fi
 	# If we should be running
 	else
 		# And we are
 		if [ "$STATUS" = "running" ]; then
-			echo "$NAME is running. All is well"
+			[ "$QUIET" = 0 ] && echo "$NAME is running. All is well"
 			continue
 		# if it's just stopped, start it
 		elif [ "$STATUS" = "stopped" ]; then
-			# TODO be quiet only if requested
+			# be quiet only if requested
+			[ "$SILENT" = 0 ] && echo "Starting $NAME"
 			docker start "$NAME" >/dev/null
-			$ETCDCTL set --ttl $TTL $container/hosts/$HOSTNAME stopped >/dev/null
+			$ETCDCTL set --ttl $TTL $container/hosts/$HOSTNAME running >/dev/null
+			continue
 		# else, gather up what else we need and start it at the bottom
 		fi
 	fi
@@ -257,7 +262,8 @@ for container in $containers; do
 
 	
 	$ETCDCTL set $container/hosts/$HOSTNAME "starting" >/dev/null
-	# TODO be quiet only if requested
+	# be quiet only if requested
+	[ "$SILENT" = 0 ] && echo "Starting a new $NAME from $IMAGE"
 	docker run -d --name $NAME $NEEDPTY $LINKS $VOLUMES $HNAME $PORTS $IMAGE $COMMAND
 	echo
 done
