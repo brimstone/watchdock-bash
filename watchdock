@@ -73,8 +73,8 @@ ETCDCTL="$ETCDCTLBIN -C http://$ETCDHOST:$ETCDPORT"
 echo "Checking containers"
 containers=""
 if ! containers=$($ETCDCTL ls /containers); then
-	echo "Error getting containers: $containers"
-	echo "$ $ETCDCTL ls /containers"
+	echo "Error getting containers: $containers. Tried:" >&2
+	echo "$ $ETCDCTL ls /containers" >&2
 	exit 1
 fi
 
