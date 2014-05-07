@@ -1,7 +1,6 @@
 #!/bin/bash
 
 set -ueo pipefail
-#set -x
 
 ETCDHOST=localhost
 ETCDPORT=4001
@@ -41,6 +40,9 @@ canrun(){
 
 while [ $# -gt 0 ]; do
 	case "$1" in
+		--debug)
+			set -x
+		;;
 		--etcdhost)
 			shift
 			ETCDHOST="$1"
