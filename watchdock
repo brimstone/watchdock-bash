@@ -8,6 +8,16 @@ ETCDPORT=4001
 TTL=120
 ETCDCTLBIN="$(which etcdctl || :)"
 
+usage(){
+	cat <<DOG
+Usage: $0 [--etcdhost hostname] [--etcdport number] [--ttl seconds]
+	--etcdhost	hostname for etcd, default: localhost
+	--etcdport	port for etcd, default: 4001
+	--ttl		TTL for keys, default 120 seconds
+	--etcdctl	alternative path for etcdctl binary if not in \$PATH
+DOG
+}
+
 while [ $# -gt 0 ]; do
 	case "$1" in
 		--etcdhost)
@@ -26,6 +36,12 @@ while [ $# -gt 0 ]; do
 			shift
 			ETCDCTLBIN="$1"
 		;;
+		--help)
+			shift
+			usage
+			exit
+		;;
+	# TODO force option
 		*)
 			echo "Unknown option $1"
 			exit 1
