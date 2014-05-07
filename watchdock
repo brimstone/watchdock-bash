@@ -7,6 +7,8 @@ ETCDPORT=4001
 TTL=120
 ETCDCTLBIN="$(which etcdctl || :)"
 
+DOPULL=0
+
 usage(){
 	cat <<DOG
 Usage: $0 [--etcdhost hostname] [--etcdport number] [--ttl seconds]
@@ -64,6 +66,9 @@ while [ $# -gt 0 ]; do
 			usage
 			exit
 		;;
+		--pull)
+			DOPULL=1
+		;;
 	# TODO force option
 		*)
 			echo "Unknown option $1"
@@ -102,7 +107,19 @@ if ! containers=$($ETCDCTL ls /containers); then
 	exit 1
 fi
 
-for container in $($ETCDCTL ls /containers); do
+if [ "$DOPULL" = 1 ]; then
+	for container in $containers; do
+		# if we can run this container
+		if canrun $container; then
+			IMAGE=""
+			IMAGE=$($ETCDCTL get $container/image) || continue
+			# pull down it's image incase we need it later
+			docker pull "$IMAGE"
+		fi
+	done
+fi
+
+for container in $containers; do
 	NAME="${container##*/}"
 
 	# Get locations this container can run, required
