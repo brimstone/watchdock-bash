@@ -141,10 +141,10 @@ for container in $containers; do
 	if RUNNING=$(docker inspect -f "{{ .State.Running }}" $NAME 2>/dev/null); then
 		if [ $RUNNING = "true" ]; then
 			STATUS="running"
-			$ETCDCTL set --ttl $TTL $container/hosts/$HOSTNAME $STATUS >/dev/null
 		else
 			STATUS="stopped"
 		fi
+		$ETCDCTL set --ttl $TTL $container/hosts/$HOSTNAME $STATUS >/dev/null
 	fi
 
 	# Check to see if we've hit our max instances 
@@ -168,13 +168,20 @@ for container in $containers; do
 			fi
 			if [ "$STATE" = "running" ]; then
 				instances=$[ $instances + 1 ]
+			elif [ "$STATE" = "starting" ]; then
+				instances=$[ $instances + 1 ]
 			fi
 		done
+		#echo "$NAME: running $instances of $MAXINST"
 		# If we have more than our max, we shouldn't run it
 		if [ "$instances" -gt "$MAXINST" ]; then
 			SHOULDRUN="false"
+		elif [ "$instances" = "$MAXINST" -a "$STATUS" != "running" ]; then
+			SHOULDRUN="false"
 		fi
 	fi
+
+	# TODO support a BINDTO option and probably functionize the status checking
 
 	# if we shouldn't be running our image
 	if [ "$SHOULDRUN" = "false" ]; then
@@ -182,6 +189,7 @@ for container in $containers; do
 		if [ "$STATUS" = "running" ]; then
 			# be quiet only if requested
 			[ "$SILENT" = 0 ] && echo "Stopping $NAME"
+			$ETCDCTL set --ttl $TTL $container/hosts/$HOSTNAME stopping >/dev/null
 			docker stop $NAME >/dev/null
 			$ETCDCTL set --ttl $TTL $container/hosts/$HOSTNAME stopped >/dev/null
 			continue
@@ -199,6 +207,7 @@ for container in $containers; do
 		elif [ "$STATUS" = "stopped" ]; then
 			# be quiet only if requested
 			[ "$SILENT" = 0 ] && echo "Starting $NAME"
+			$ETCDCTL set --ttl $TTL $container/hosts/$HOSTNAME starting >/dev/null
 			docker start "$NAME" >/dev/null
 			$ETCDCTL set --ttl $TTL $container/hosts/$HOSTNAME running >/dev/null
 			continue
@@ -265,5 +274,6 @@ for container in $containers; do
 	# be quiet only if requested
 	[ "$SILENT" = 0 ] && echo "Starting a new $NAME from $IMAGE"
 	docker run -d --name $NAME $NEEDPTY $LINKS $VOLUMES $HNAME $PORTS $IMAGE $COMMAND
+	$ETCDCTL set --ttl $TTL $container/hosts/$HOSTNAME running >/dev/null
 	echo
 done
