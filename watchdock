@@ -21,6 +21,7 @@ Usage: $0 [--etcdhost hostname] [--etcdport number] [--ttl seconds]
 	--etcdport	port for etcd, default: 4001
 	--ttl		TTL for keys, default 120 seconds
 	--etcdctl	alternative path for etcdctl binary if not in \$PATH
+	--pull		Pulls down images for any containers this host could run
 DOG
 }
 
