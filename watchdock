@@ -24,6 +24,20 @@ Usage: $0 [--etcdhost hostname] [--etcdport number] [--ttl seconds]
 DOG
 }
 
+get_status(){
+	RUNNING=""
+	STATUS="unknown"
+	if RUNNING=$(docker inspect -f "{{ .State.Running }}" $1 2>/dev/null); then
+		if [ "$RUNNING" = "true" ]; then
+			STATUS="running"
+		else
+			STATUS="stopped"
+		fi
+	fi
+	echo "$STATUS"
+	$ETCDCTL set --ttl $TTL /containers/$1/hosts/$HOSTNAME $STATUS >/dev/null
+}
+
 # This determines if we can even run a container on our host
 canrun(){
 	# Get locations this container can run, required
@@ -119,7 +133,7 @@ if [ "$DOPULL" = 1 ]; then
 			IMAGE=""
 			IMAGE=$($ETCDCTL get $container/image) || continue
 			# pull down it's image incase we need it later
-			docker pull "$IMAGE"
+			docker pull "$IMAGE" >/dev/null 2>/dev/null
 		fi
 	done
 fi
@@ -137,15 +151,7 @@ for container in $containers; do
 
 
 	# Determine status of container
-	STATUS=""
-	if RUNNING=$(docker inspect -f "{{ .State.Running }}" $NAME 2>/dev/null); then
-		if [ $RUNNING = "true" ]; then
-			STATUS="running"
-		else
-			STATUS="stopped"
-		fi
-		$ETCDCTL set --ttl $TTL $container/hosts/$HOSTNAME $STATUS >/dev/null
-	fi
+	STATUS="$(get_status "$NAME")"
 
 	# Check to see if we've hit our max instances 
 	MAXINST=""
@@ -172,7 +178,6 @@ for container in $containers; do
 				instances=$[ $instances + 1 ]
 			fi
 		done
-		#echo "$NAME: running $instances of $MAXINST"
 		# If we have more than our max, we shouldn't run it
 		if [ "$instances" -gt "$MAXINST" ]; then
 			SHOULDRUN="false"
@@ -181,7 +186,23 @@ for container in $containers; do
 		fi
 	fi
 
-	# TODO support a BINDTO option and probably functionize the status checking
+	# Get our links, optional
+	LINKS=""
+	if LINKS=$($ETCDCTL get $container/links); then
+		LINKS=${LINKS// / -link }
+		LINKS="--link $LINKS"
+	else
+		LINKS=""
+	fi
+
+	BINDTO=""
+	if BINDTO=$($ETCDCTL get $container/bindto); then
+		LINKSTATUS="$(get_status "$BINDTO")"
+		LINKS="--link $BINDTO:$BINDTO"
+		if [ "$LINKSTATUS" != "running" ]; then
+			SHOULDRUN="false"
+		fi
+	fi
 
 	# if we shouldn't be running our image
 	if [ "$SHOULDRUN" = "false" ]; then
@@ -246,15 +267,6 @@ for container in $containers; do
 		VOLUMES=""
 	fi
 
-	# Get our links, optional
-	LINKS=""
-	if LINKS=$($ETCDCTL get $container/links); then
-		LINKS=${LINKS// / -link }
-		LINKS="--link $LINKS"
-	else
-		LINKS=""
-	fi
-
 	# Get our command, optional
 	COMMAND=""
 	if ! COMMAND=$($ETCDCTL get $container/command); then
@@ -273,6 +285,7 @@ for container in $containers; do
 	$ETCDCTL set $container/hosts/$HOSTNAME "starting" >/dev/null
 	# be quiet only if requested
 	[ "$SILENT" = 0 ] && echo "Starting a new $NAME from $IMAGE"
+	echo docker run -d --name $NAME $NEEDPTY $LINKS $VOLUMES $HNAME $PORTS $IMAGE $COMMAND
 	docker run -d --name $NAME $NEEDPTY $LINKS $VOLUMES $HNAME $PORTS $IMAGE $COMMAND
 	$ETCDCTL set --ttl $TTL $container/hosts/$HOSTNAME running >/dev/null
 	echo
