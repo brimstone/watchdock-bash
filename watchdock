@@ -10,6 +10,7 @@ ETCDCTLBIN="$(which etcdctl || :)"
 DOPULL=0
 QUIET=0
 SILENT=0
+DOCLEANUP=0
 if [ $TERM = "dumb" ]; then
 	QUIET=1
 fi
@@ -22,6 +23,7 @@ Usage: $0 [--etcdhost hostname] [--etcdport number] [--ttl seconds]
 	--ttl		TTL for keys, default 120 seconds
 	--etcdctl	alternative path for etcdctl binary if not in \$PATH
 	--pull		Pulls down images for any containers this host could run
+	--cleanup	Remove untagged images and stopped containers
 DOG
 }
 
@@ -33,6 +35,9 @@ get_status(){
 			STATUS="running"
 		else
 			STATUS="stopped"
+			if [ "$DOCLEANUP" = "1" ]; then
+				docker rm -f "$1" >/dev/null
+			fi
 		fi
 	fi
 	echo "$STATUS"
@@ -89,6 +94,9 @@ while [ $# -gt 0 ]; do
 		--pull)
 			DOPULL=1
 		;;
+		--cleanup)
+			DOCLEANUP=1
+		;;
 	# TODO force option
 		*)
 			echo "Unknown option $1"
@@ -137,6 +145,13 @@ if [ "$DOPULL" = 1 ]; then
 			docker pull "$IMAGE" >/dev/null 2>/dev/null
 		fi
 	done
+fi
+
+if [ "$DOCLEANUP" = 1 ]; then
+	IMAGES="$(docker images | awk '$1~/^<none>$/ {print $3}')"
+	if [ -n "$IMAGES" ]; then
+		docker rmi "$IMAGES"
+	fi
 fi
 
 for container in $containers; do
@@ -214,6 +229,9 @@ for container in $containers; do
 			$ETCDCTL set --ttl $TTL $container/hosts/$HOSTNAME stopping >/dev/null
 			docker stop $NAME >/dev/null
 			$ETCDCTL set --ttl $TTL $container/hosts/$HOSTNAME stopped >/dev/null
+			if [ "$DOCLEANUP" = "1" ]; then
+				docker rm -f "$NAME" >/dev/null
+			fi
 			continue
 		else
 			[ "$QUIET" = 0 ] && echo "$NAME isn't meant for us, ignoring"
@@ -286,8 +304,9 @@ for container in $containers; do
 	$ETCDCTL set $container/hosts/$HOSTNAME "starting" >/dev/null
 	# be quiet only if requested
 	[ "$SILENT" = 0 ] && echo "Starting a new $NAME from $IMAGE"
+	$ETCDCTL set $container/hosts/$HOSTNAME starting >/dev/null
 	echo docker run -d --name $NAME $NEEDPTY $LINKS $VOLUMES $HNAME $PORTS $IMAGE $COMMAND
-	docker run -d --name $NAME $NEEDPTY $LINKS $VOLUMES $HNAME $PORTS $IMAGE $COMMAND
+	docker run -d --name $NAME $NEEDPTY $LINKS $VOLUMES $HNAME $PORTS $IMAGE $COMMAND >/dev/null
 	$ETCDCTL set --ttl $TTL $container/hosts/$HOSTNAME running >/dev/null
 	echo
 done
