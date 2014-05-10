@@ -257,6 +257,16 @@ for container in $containers; do
 		fi
 	fi
 
+	# Get volumes from other containers, optional
+	VOLUMESFROM=""
+	if VOLUMESFROM=$($ETCDCTL get $container/volumesfrom); then
+		VOLUMESFROM=${VOLUMESFROM// / --volumes-from }
+		VOLUMESFROM="--volumes-from $VOLUMESFROM"
+		# TODO only run our container now if we have a live container to pull from
+	else
+		VOLUMESFROM=""
+	fi
+
 	# Get our image, required
 	IMAGE=""
 	IMAGE=$($ETCDCTL get $container/image) || continue
@@ -301,14 +311,13 @@ for container in $containers; do
 	else
 		NEEDPTY=""
 	fi
-
 	
 	$ETCDCTL set $container/hosts/$HOSTNAME "starting" >/dev/null
 	# be quiet only if requested
 	[ "$SILENT" = 0 ] && echo "Starting a new $NAME from $IMAGE"
 	$ETCDCTL set $container/hosts/$HOSTNAME starting >/dev/null
-	echo docker run -d --name $NAME $NEEDPTY $LINKS $VOLUMES $HNAME $PORTS $IMAGE $COMMAND
-	docker run -d --name $NAME $NEEDPTY $LINKS $VOLUMES $HNAME $PORTS $IMAGE $COMMAND >/dev/null
+	echo docker run -d --name $NAME $NEEDPTY $LINKS $VOLUMES $VOLUMESFROM $HNAME $PORTS $IMAGE $COMMAND
+	docker run -d --name $NAME $NEEDPTY $LINKS $VOLUMES $VOLUMESFROM $HNAME $PORTS $IMAGE $COMMAND >/dev/null
 	$ETCDCTL set --ttl $TTL $container/hosts/$HOSTNAME running >/dev/null
 	docker logs "$NAME"
 	echo
