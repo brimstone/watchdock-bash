@@ -150,7 +150,7 @@ fi
 
 if [ "$DOCLEANUP" = 1 ]; then
 	docker images | awk '$1~/^<none>$/ {print $3}' | while read aid; do
-		docker rmi "$aid"
+		docker rmi "$aid" || :
 	done
 	# TODO Make a list of images still in use
 fi
