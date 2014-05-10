@@ -113,6 +113,7 @@ if [ -z "$DOCKERDPID" ]; then
 	exit 1
 fi
 
+# TODO Don't actually start, stop or pull if docker is already running
 OTHERDOCKERPID=$(pgrep docker | grep -v $DOCKERDPID || :)
 if [ -n "$OTHERDOCKERPID" ]; then
 	echo "Exiting because docker is already running: $( echo "$OTHERDOCKERPID" | tr '\n' ' ')" >&2
