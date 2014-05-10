@@ -141,8 +141,8 @@ if [ "$DOPULL" = 1 ]; then
 		if canrun $container; then
 			IMAGE=""
 			IMAGE=$($ETCDCTL get $container/image) || continue
-			# pull down it's image incase we need it later
-			docker pull "$IMAGE" >/dev/null 2>/dev/null
+			# pull down its image incase we need it later
+			docker pull "$IMAGE" >/dev/null 2>/dev/null || :
 		fi
 	done
 fi
