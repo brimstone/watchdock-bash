@@ -148,10 +148,10 @@ if [ "$DOPULL" = 1 ]; then
 fi
 
 if [ "$DOCLEANUP" = 1 ]; then
-	IMAGES="$(docker images | awk '$1~/^<none>$/ {print $3}')"
-	if [ -n "$IMAGES" ]; then
-		docker rmi "$IMAGES"
-	fi
+	docker images | awk '$1~/^<none>$/ {print $3}' | while read aid; do
+		docker rmi "$aid"
+	done
+	# TODO Make a list of images still in use
 fi
 
 for container in $containers; do
