@@ -250,6 +250,7 @@ for container in $containers; do
 			$ETCDCTL set --ttl $TTL $container/hosts/$HOSTNAME starting >/dev/null
 			docker start "$NAME" >/dev/null
 			$ETCDCTL set --ttl $TTL $container/hosts/$HOSTNAME running >/dev/null
+			docker logs "$NAME"
 			continue
 		# else, gather up what else we need and start it at the bottom
 		fi
@@ -308,5 +309,6 @@ for container in $containers; do
 	echo docker run -d --name $NAME $NEEDPTY $LINKS $VOLUMES $HNAME $PORTS $IMAGE $COMMAND
 	docker run -d --name $NAME $NEEDPTY $LINKS $VOLUMES $HNAME $PORTS $IMAGE $COMMAND >/dev/null
 	$ETCDCTL set --ttl $TTL $container/hosts/$HOSTNAME running >/dev/null
+	docker logs "$NAME"
 	echo
 done
