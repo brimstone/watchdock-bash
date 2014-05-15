@@ -153,7 +153,15 @@ fi
 
 if [ "$DOCLEANUP" = 1 ]; then
 	docker images | awk '$1~/^<none>$/ {print $3}' | while read aid; do
-		docker rmi "$aid" || :
+		ERROR="$(docker rmi "$aid" 2>&1 || :)"
+		if [ -n "$ERROR" ]; then
+			echo "$ERROR"
+		fi
+		if echo "$ERROR" | grep -q "^Error: Conflict, cannot delete"; then
+			CID="$(echo "$ERROR" | awk 'NR==1 {print $9}')"
+			echo "Removing old container $CID to clean up image"
+			docker rm -f "$CID" >/dev/null
+		fi
 	done
 	# TODO Make a list of images still in use
 fi
