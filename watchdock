@@ -262,7 +262,7 @@ for container in $containers; do
 			$ETCDCTL set --ttl $TTL $container/hosts/$HOSTNAME starting >/dev/null
 			docker start "$NAME" >/dev/null
 			$ETCDCTL set --ttl $TTL $container/hosts/$HOSTNAME running >/dev/null
-			docker logs "$NAME" | tail -n 60
+			docker logs "$NAME" 2>&1 | tail -n 60
 			continue
 		# else, gather up what else we need and start it at the bottom
 		fi
