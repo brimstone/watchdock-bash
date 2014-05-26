@@ -158,7 +158,7 @@ if [ "$DOCLEANUP" = 1 ]; then
 			echo "$ERROR"
 		fi
 		if echo "$ERROR" | grep -q "^Error: Conflict, cannot delete"; then
-			CID="$(echo "$ERROR" | awk 'NR==1 {print $9}')"
+			CID="$(echo "$ERROR" | awk 'NR==1 {print $10}')"
 			echo "Removing old container $CID to clean up image"
 			docker rm -f "$CID" >/dev/null
 		fi
